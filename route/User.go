@@ -3,9 +3,92 @@ package restapi
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log"
+	"os"
 	"time"
 )
+
+func (c *InitAPI) GetProfilePhotoById(id string) (string, string, error) {
+	var filename, fileType string
+	err := c.Db.QueryRow(`SELECT filename, file_type FROM photo_users WHERE user_id = $1`, id).Scan(&filename, &fileType)
+	if err != nil {
+		log.Println(err)
+		return "", "", err
+	}
+	return filename, fileType, nil
+}
+
+// GetProfilePhoto
+func (c *InitAPI) GetProfilePhoto(ctx context.Context, req *GetFile) (io.Reader, string, error) {
+	filename, fileType, err := c.GetProfilePhotoById(req.UserId)
+	if err != nil {
+		return nil, "", nil
+	}
+
+	url := fmt.Sprintf("../asset/%s", filename)
+	file, err := os.Open(url)
+	if err != nil {
+		log.Println(err)
+		return nil, "", err
+	}
+
+	return file, fileType, nil
+}
+
+// InsertProfilePhoto
+func (c *InitAPI) InsertProfilePhoto(ctx context.Context, req *FileItem) (*UserId, error) {
+	var profileId string
+	err := c.Db.QueryRow(`INSERT INTO photo_users (user_id, filename, file_type, size) VALUES ($1, $2, $3, $4) RETURNING id`,
+		req.UserId, req.Filename, req.FileType, req.FileSize).Scan(&profileId)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("../asset/%s", req.Filename)
+
+	// fileLocation := filepath.Join(dir, "files", req.Filename)
+	// targetFile, err := os.OpenFile(fileLocation, os.O_WRONLY|os.O_CREATE, 0666)
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return nil, err
+	// }
+	// defer targetFile.Close()
+
+	file, err := os.Create(filename)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	defer file.Close()
+	// _, err := io.Copy(file, req.File)
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return nil, err
+	// }
+	if _, err := io.Copy(file, req.File); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return &UserId{
+		Id: profileId,
+	}, nil
+}
+
+// GetCustomerById
+func (c *InitAPI) GetCustomerById(id string) bool {
+	var userId string
+	// err := c.Db.QueryRow(context.Background(), `SELECT username FROM users WHERE id = $1`, id).Scan(&userId)
+	// if err != nil {
+	// 	return false
+	// }
+
+	return userId != ""
+}
 
 // UpdateUser
 func (c *InitAPI) UpdateUser(ctx context.Context, req *User, id string) (*ReturnActions, error) {
@@ -138,6 +221,7 @@ func (c *InitAPI) CreateUser(ctx context.Context, req *User, rolesID string) (*U
 	}, nil
 }
 
+// GetRoles
 func (c *InitAPI) GetRoles(id string) (string, error) {
 	var roles string
 	err := c.Db.QueryRow(`SELECT roles FROM roles WHERE id = $1`, id).Scan(&roles)

@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	api "restapi"
+	api "restapi/route"
 )
 
 func main() {
